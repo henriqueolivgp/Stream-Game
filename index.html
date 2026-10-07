@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="pt">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="src/styles/index.css">
+        <title>Debug Rush</title>
+    </head>
+    <body>
+        <div id="wrap">
+            <div class="card" id="card"></div>
+            <div
+                id="toasts"
+                style="display: flex; flex-direction: column; gap: 6px"
+            ></div>
+        </div>
+        <div id="setup" class="card">
+            <div class="hd"><span>// debug_rush · configuração</span></div>
+            <div class="bd">
+                <label class="mu">Canal Twitch</label
+                ><input id="s1" placeholder="o_teu_canal" />
+                <label class="mu">ID do chatroom Kick (número)</label
+                ><input id="s2" placeholder="ex: 12345678" />
+                <label class="mu">Posição</label
+                ><select id="s3">
+                    <option value="bl">Baixo-esquerda</option>
+                    <option value="br">Baixo-direita</option>
+                    <option value="tl">Cima-esquerda</option>
+                    <option value="tr">Cima-direita</option>
+                </select>
+                <button id="gen">Gerar link OBS</button
+                ><button id="tst">Testar</button>
+                <input
+                    id="lnk"
+                    readonly
+                    style="margin-top: 8px"
+                    placeholder="o link aparece aqui"
+                />
+            </div>
+        </div>
+        <script>
+            const P = new URLSearchParams(location.search);
+            const CFG = {
+                tw: P.get("twitch"),
+                ki: P.get("kickid"),
+                iv: +P.get("intervalo") || 120,
+                tm: +P.get("tempo") || 20,
+                pos: P.get("pos") || "bl",
+                auto: P.get("auto") !== "0",
+            };
+            const DEMO = !CFG.tw && !CFG.ki;
+            const $ = (id) => document.getElementById(id),
+                card = $("card"),
+                T = $("toasts");
+            $("wrap").className = CFG.pos;
+            $("wrap").id = "wrap";
+            const e = (s) =>
+                String(s).replace(
+                    /[&<>"]/g,
+                    (c) =>
+                        ({
+                            "&": "&amp;",
+                            "<": "&lt;",
+                            ">": "&gt;",
+                            '"': "&quot;",
+                        })[c],
+                );
+            // [pergunta, código, opções, certa, explicação]
+            const Q = [
+                [
+                    "Qual o resultado?",
+                    "console.log(0.1+0.2===0.3)",
+                    ["true", "false", "undefined", "erro"],
+                    1,
+                    "Vírgula flutuante: dá 0.30000000000000004.",
+                ],
+                [
+                    "Qual o resultado?",
+                    "typeof null",
+                    ["'null'", "'undefined'", "'object'", "'number'"],
+                    2,
+                    "Bug histórico do JavaScript que ficou para sempre.",
+                ],
+                [
+                    "Qual o resultado?",
+                    "[] + []",
+                    ["[]", "'' (vazio)", "0", "undefined"],
+                    1,
+                    "Os arrays viram strings vazias e somam.",
+                ],
+                [
+                    "Qual o resultado?",
+                    "'5' - 2",
+                    ["'52'", "3", "NaN", "erro"],
+                    1,
+                    "O - força conversão para número.",
+                ],
+                [
+                    "Qual o resultado?",
+                    "'5' + 2",
+                    ["'52'", "7", "NaN", "erro"],
+                    0,
+                    "O + com string faz concatenação.",
+                ],
+                [
+                    "Qual o resultado?",
+                    "NaN === NaN",
+                    ["true", "false", "erro", "null"],
+                    1,
+                    "NaN não é igual a nada, nem a ele próprio.",
+                ],
+                [
+                    "Qual o resultado?",
+                    "!!'0'",
+                    ["true", "false", "0", "erro"],
+                    0,
+                    "String não vazia é sempre truthy.",
+                ],
+                [
+                    "Qual o resultado? (Python)",
+                    "print(len('olá'))",
+                    ["2", "3", "4", "erro"],
+                    1,
+                    "3 caracteres.",
+                ],
+                [
+                    "Qual o resultado? (Python)",
+                    "print(2**3)",
+                    ["6", "8", "9", "23"],
+                    1,
+                    "** é potência.",
+                ],
+                [
+                    "Como desfazer o último commit mantendo as alterações?",
+                    "",
+                    [
+                        "git reset --soft HEAD~1",
+                        "git commit --amend",
+                        "git stash drop",
+                        "git push -f",
+                    ],
+                    0,
+                    "--soft mantém tudo em staging.",
+                ],
+                [
+                    "Complexidade da pesquisa binária?",
+                    "",
+                    ["O(1)", "O(n)", "O(log n)", "O(n²)"],
+                    2,
+                    "Divide o problema a meio em cada passo.",
+                ],
+                [
+                    "O que significa o erro HTTP 404?",
+                    "",
+                    [
+                        "Servidor caiu",
+                        "Não encontrado",
+                        "Sem permissão",
+                        "Bule de chá",
+                    ],
+                    1,
+                    "E o 418 é mesmo 'I'm a teapot'.",
+                ],
+                [
+                    "Qual cláusula SQL filtra depois do GROUP BY?",
+                    "",
+                    ["WHERE", "HAVING", "FILTER", "ORDER"],
+                    1,
+                    "WHERE filtra linhas, HAVING filtra grupos.",
+                ],
+                [
+                    "Qual destas NÃO é linguagem de programação?",
+                    "",
+                    ["Rust", "Go", "HTML", "Python"],
+                    2,
+                    "HTML é linguagem de marcação.",
+                ],
+                [
+                    "Que estrutura de dados é LIFO?",
+                    "",
+                    ["Fila", "Pilha (stack)", "Árvore", "Hash"],
+                    1,
+                    "O último a entrar é o primeiro a sair.",
+                ],
+                [
+                    "Qual é o bug?",
+                    "for(i=0;i<=arr.length;i++)",
+                    [
+                        "Falta um ;",
+                        "Lê uma posição a mais",
+                        "i devia ser let",
+                        "Não há bug",
+                    ],
+                    1,
+                    "Off-by-one: devia ser < em vez de <=.",
+                ],
+                [
+                    "1010 em binário é quanto em decimal?",
+                    "",
+                    ["8", "10", "12", "5"],
+                    1,
+                    "8 + 2 = 10.",
+                ],
+            ];
+            let S = {};
+            if (!DEMO)
+                try {
+                    S = JSON.parse(localStorage.getItem("dr") || "{}");
+                } catch (_) {}
+            const save = () => {
+                if (!DEMO)
+                    try {
+                        localStorage.setItem("dr", JSON.stringify(S));
+                    } catch (_) {}
+            };
+            let R = null,
+                hideT,
+                deck = [],
+                nextAt = Date.now() + 20000;
+            function show(h) {
+                clearTimeout(hideT);
+                card.innerHTML = h;
+                card.style.display = "block";
+                card.style.animation = "none";
+                card.offsetHeight;
+                card.style.animation = "";
+            }
+            function hide() {
+                card.style.display = "none";
+            }
+            function later(ms) {
+                hideT = setTimeout(hide, ms);
+            }
+            function toast(t) {
+                if (T.children.length >= 3) return;
+                const d = document.createElement("div");
+                d.className = "t";
+                d.innerHTML = t;
+                T.appendChild(d);
+                setTimeout(() => d.remove(), 4000);
+            }
+            const players = () => Object.values(S);
+            function startRound() {
+                if (R || !players().length) return false;
+                if (!deck.length)
+                    deck = Q.map((_, i) => i).sort(() => Math.random() - 0.5);
+                const q = Q[deck.pop()];
+                R = {
+                    q,
+                    A: {},
+                    n: [0, 0, 0, 0],
+                    end: Date.now() + CFG.tm * 1000,
+                };
+                show(
+                    `<div class=hd><span>// debug_rush.js</span><span id=tl></span></div><div class=bar><b id=br></b></div><div class=bd><div class=q>${e(q[0])}</div>${q[1] ? `<pre>${e(q[1])}</pre>` : ""}${q[2].map((o, i) => `<div class=o><i id=i${i}></i><span>!${"abcd"[i]} ${e(o)}</span><span id=c${i}>0</span></div>`).join("")}</div>`,
+                );
+                setTimeout(endRound, CFG.tm * 1000);
+                return true;
+            }
+            function endRound() {
+                const r = R;
+                if (!r) return;
+                R = null;
+                const win = [];
+                for (const [k, a] of Object.entries(r.A)) {
+                    const p = S[k];
+                    if (!p) continue;
+                    if (a.i === r.q[3]) {
+                        p.s++;
+                        const pts =
+                            100 +
+                            Math.round(100 * (1 - a.t / (CFG.tm * 1000))) +
+                            Math.min(p.s - 1, 5) * 20;
+                        p.p += pts;
+                        win.push([p.n, pts, p.s]);
+                    } else p.s = 0;
+                }
+                save();
+                win.sort((a, b) => b[1] - a[1]);
+                const m = ["🥇", "🥈", "🥉"];
+                show(
+                    `<div class=hd><span>// resultado</span><span>${win.length}/${Object.keys(r.A).length} certas</span></div><div class=bd><div class="q g">✔ !${"abcd"[r.q[3]]} ${e(r.q[2][r.q[3]])}</div><div class=mu style="margin-bottom:8px">${e(r.q[4])}</div>${
+                        win.length
+                            ? win
+                                  .slice(0, 3)
+                                  .map(
+                                      (w, i) =>
+                                          `<div>${m[i]} ${e(w[0])} <span class=g>+${w[1]}</span>${w[2] > 2 ? ` 🔥${w[2]}` : ""}</div>`,
+                                  )
+                                  .join("")
+                            : "<div class=mu>Ninguém acertou 😅</div>"
+                    }</div>`,
+                );
+                later(10000);
+                nextAt = Date.now() + CFG.iv * 1000;
+            }
+            function board() {
+                const t = players()
+                    .sort((a, b) => b.p - a.p)
+                    .slice(0, 5);
+                show(
+                    `<div class=hd><span>// top_players</span></div><div class=bd>${t.length ? t.map((p, i) => `<div class=o><span>${i + 1}. ${e(p.n)}</span><span>${p.p}</span></div>`).join("") : "<span class=mu>Ainda sem jogadores. Escreve !jogar</span>"}</div>`,
+                );
+                later(8000);
+            }
+            function info() {
+                show(
+                    `<div class=hd><span>// debug_rush.js</span></div><div class=bd><div class=q>Acerta nos bugs e sobe no ranking</div><div>!jogar <span class=mu>entrar no jogo</span></div><div>!a !b !c !d <span class=mu>responder</span></div><div>!pontos <span class=mu>os teus pontos</span></div><div>!top <span class=mu>ranking</span></div></div>`,
+                );
+                later(9000);
+            }
+            setInterval(() => {
+                if (R) {
+                    const l = Math.max(0, R.end - Date.now());
+                    $("br").style.width = l / (CFG.tm * 10) + "%";
+                    $("tl").textContent = Math.ceil(l / 1000) + "s";
+                    const tot = Math.max(
+                        1,
+                        R.n.reduce((a, b) => a + b),
+                    );
+                    R.n.forEach((n, i) => {
+                        $("c" + i).textContent = n;
+                        $("i" + i).style.width = (n / tot) * 100 + "%";
+                    });
+                } else if (
+                    CFG.auto &&
+                    !DEMO &&
+                    Date.now() > nextAt &&
+                    players().length &&
+                    card.style.display === "none"
+                )
+                    startRound();
+            }, 250);
+            // anti-spam
+            const CMDS = ["jogo", "jogar", "a", "b", "c", "d", "top", "pontos"];
+            const last = {},
+                hits = {},
+                mute = {},
+                cd = {};
+            let bucket = 30,
+                lastB = Date.now();
+            function onMsg(pl, user, text, mod, broad) {
+                text = String(text).trim();
+                if (text[0] !== "!" || text.length > 40) return;
+                const now = Date.now();
+                bucket = Math.min(30, bucket + ((now - lastB) / 1000) * 15);
+                lastB = now;
+                if (bucket < 1) return;
+                bucket--;
+                const [c, a] = text.slice(1).toLowerCase().split(/\s+/);
+                if (!CMDS.includes(c)) return;
+                const k = pl + ":" + user.toLowerCase();
+                if (mute[k] > now) return;
+                hits[k] = (hits[k] || []).filter((t) => now - t < 10000);
+                hits[k].push(now);
+                if (hits[k].length > 6) {
+                    mute[k] = now + 60000;
+                    return;
+                }
+                if (now - (last[k] || 0) < 1500) return;
+                last[k] = now;
+                const gcd = (n, ms) => {
+                    if (now - (cd[n] || 0) < ms) return true;
+                    cd[n] = now;
+                };
+                const nm = user.slice(0, 20);
+                if (c === "jogo") {
+                    if (a === "start" && mod) return void startRound();
+                    if (a === "reset" && broad) {
+                        S = {};
+                        save();
+                        return toast("Ranking reposto");
+                    }
+                    if (!R && !gcd("jogo", 15000)) info();
+                } else if (c === "jogar") {
+                    if (!S[k]) {
+                        S[k] = { n: nm, p: 0, s: 0 };
+                        save();
+                        toast(`💻 <b>${e(nm)}</b> entrou no jogo`);
+                    }
+                } else if (c === "top") {
+                    if (!R && !gcd("top", 20000)) board();
+                } else if (c === "pontos") {
+                    if (S[k] && !gcd("p" + k, 10000))
+                        toast(`${e(nm)}: <span class=g>${S[k].p} pts</span>`);
+                } else {
+                    const i = "abcd".indexOf(c);
+                    if (R && S[k] && !R.A[k]) {
+                        R.A[k] = { i, t: now - (R.end - CFG.tm * 1000) };
+                        R.n[i]++;
+                    }
+                }
+            }
+            window.sim = (u, t, mod, broad) => onMsg("x", u, t, mod, broad);
+            // ligações
+            function twitch(ch) {
+                const w = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+                w.onopen = () => {
+                    w.send("CAP REQ :twitch.tv/tags");
+                    w.send(
+                        "NICK justinfan" +
+                            ((10000 + Math.random() * 80000) | 0),
+                    );
+                    w.send("JOIN #" + ch.toLowerCase());
+                };
+                w.onmessage = (m) =>
+                    m.data.split("\r\n").forEach((l) => {
+                        if (l.startsWith("PING"))
+                            return w.send("PONG :tmi.twitch.tv");
+                        const x = l.match(
+                            /^@(\S+) :(\w+)!\S+ PRIVMSG #\S+ :(.*)$/,
+                        );
+                        if (!x) return;
+                        const t = Object.fromEntries(
+                            x[1].split(";").map((s) => s.split("=")),
+                        );
+                        const b = t.badges || "";
+                        onMsg(
+                            "tw",
+                            t["display-name"] || x[2],
+                            x[3],
+                            /moderator|broadcaster/.test(b),
+                            /broadcaster/.test(b),
+                        );
+                    });
+                w.onclose = () => setTimeout(() => twitch(ch), 5000);
+            }
+            function kick(id) {
+                const w = new WebSocket(
+                    "wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0&flash=false",
+                );
+                w.onmessage = (m) => {
+                    try {
+                        const d = JSON.parse(m.data);
+                        if (d.event === "pusher:connection_established")
+                            w.send(
+                                JSON.stringify({
+                                    event: "pusher:subscribe",
+                                    data: {
+                                        auth: "",
+                                        channel: "chatrooms." + id + ".v2",
+                                    },
+                                }),
+                            );
+                        else if (d.event === "pusher:ping")
+                            w.send('{"event":"pusher:pong","data":{}}');
+                        else if (d.event === "App\\Events\\ChatMessageEvent") {
+                            const c = JSON.parse(d.data),
+                                bd = (
+                                    (c.sender.identity &&
+                                        c.sender.identity.badges) ||
+                                    []
+                                )
+                                    .map((b) => b.type)
+                                    .join();
+                            onMsg(
+                                "ki",
+                                c.sender.username,
+                                c.content,
+                                /moderator|broadcaster/.test(bd),
+                                /broadcaster/.test(bd),
+                            );
+                        }
+                    } catch (_) {}
+                };
+                w.onclose = () => setTimeout(() => kick(id), 5000);
+            }
+            if (CFG.tw) twitch(CFG.tw);
+            if (CFG.ki) kick(CFG.ki);
+            // painel de configuração + teste (só aparece sem parâmetros no URL)
+            if (DEMO) {
+                const s = $("setup");
+                s.style.display = "block";
+                $("gen").onclick = () => {
+                    const q = new URLSearchParams();
+                    if ($("s1").value) q.set("twitch", $("s1").value.trim());
+                    if ($("s2").value) q.set("kickid", $("s2").value.trim());
+                    q.set("pos", $("s3").value);
+                    $("lnk").value = location.href.split("?")[0] + "?" + q;
+                    $("lnk").select();
+                };
+                $("tst").onclick = () => {
+                    const u = ["ana", "rui", "bia", "tiago"];
+                    u.forEach((x) => sim(x, "!jogar"));
+                    setTimeout(() => {
+                        startRound();
+                        u.forEach((x) =>
+                            setTimeout(
+                                () =>
+                                    sim(
+                                        x,
+                                        "!" + "abcd"[(Math.random() * 4) | 0],
+                                    ),
+                                2000 + Math.random() * 9000,
+                            ),
+                        );
+                    }, 2000);
+                };
+            }
+        </script>
+    </body>
+</html>
