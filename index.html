@@ -20,6 +20,8 @@
                 ><input id="s1" placeholder="o_teu_canal" />
                 <label class="mu">ID do chatroom Kick (número)</label
                 ><input id="s2" placeholder="ex: 12345678" />
+                <label class="mu">ID do vídeo YouTube (live)</label
+                ><input id="s4" placeholder="ex: dQw4w9WgXcQ" />
                 <label class="mu">Posição</label
                 ><select id="s3">
                     <option value="bl">Baixo-esquerda</option>
@@ -42,12 +44,13 @@
             const CFG = {
                 tw: P.get("twitch"),
                 ki: P.get("kickid"),
+                yt: P.get("yt"),
                 iv: +P.get("intervalo") || 120,
                 tm: +P.get("tempo") || 20,
                 pos: P.get("pos") || "bl",
                 auto: P.get("auto") !== "0",
             };
-            const DEMO = !CFG.tw && !CFG.ki;
+            const DEMO = !CFG.tw && !CFG.ki && !CFG.yt;
             const $ = (id) => document.getElementById(id),
                 card = $("card"),
                 T = $("toasts");
@@ -464,8 +467,56 @@
                 };
                 w.onclose = () => setTimeout(() => kick(id), 5000);
             }
+            async function youtube(videoId) {
+                // 1. Descobre o liveChatId via proxy (key escondida no servidor)
+                let liveChatId;
+                try {
+                    const r = await fetch(
+                        `/api/yt-live?videoId=${encodeURIComponent(videoId)}`,
+                    );
+                    const j = await r.json();
+                    if (!r.ok || !j.liveChatId) {
+                        toast(
+                            `YouTube: ${e(j.error || j.hint || "chat indisponível")}`,
+                        );
+                        return;
+                    }
+                    liveChatId = j.liveChatId;
+                    toast(`YouTube ligado: ${e(j.title || "live")}`);
+                } catch {
+                    toast("YouTube: falha ao ligar (/api/yt-live).");
+                    return;
+                }
+                // 2. Polling contínuo das mensagens
+                let pageToken = "";
+                async function poll() {
+                    try {
+                        const u =
+                            `/api/yt-messages?liveChatId=${encodeURIComponent(liveChatId)}` +
+                            (pageToken
+                                ? `&pageToken=${encodeURIComponent(pageToken)}`
+                                : "");
+                        const r = await fetch(u);
+                        const j = await r.json();
+                        if (!r.ok) {
+                            toast(`YouTube: ${e(j.error || "erro no chat")}`);
+                            setTimeout(poll, 10000);
+                            return;
+                        }
+                        pageToken = j.nextPageToken || pageToken;
+                        (j.messages || []).forEach((m) =>
+                            onMsg("yt", m.author, m.text, m.isMod, m.isOwner),
+                        );
+                        setTimeout(poll, j.pollingIntervalMillis || 6000);
+                    } catch {
+                        setTimeout(poll, 10000);
+                    }
+                }
+                poll();
+            }
             if (CFG.tw) twitch(CFG.tw);
             if (CFG.ki) kick(CFG.ki);
+            if (CFG.yt) youtube(CFG.yt);
             // painel de configuração + teste (só aparece sem parâmetros no URL)
             if (DEMO) {
                 const s = $("setup");
@@ -474,6 +525,7 @@
                     const q = new URLSearchParams();
                     if ($("s1").value) q.set("twitch", $("s1").value.trim());
                     if ($("s2").value) q.set("kickid", $("s2").value.trim());
+                    if ($("s4").value) q.set("yt", $("s4").value.trim());
                     q.set("pos", $("s3").value);
                     $("lnk").value = location.href.split("?")[0] + "?" + q;
                     $("lnk").select();

@@ -1,0 +1,3 @@
+# Copia para .dev.vars para testar localmente com `wrangler pages dev`
+# NUNCA commitar o .dev.vars real (tem a key secreta)
+YT_API_KEY=AIzaSyABLPW4yInLpFai0-N6B4uL9WmojiXoL9g
